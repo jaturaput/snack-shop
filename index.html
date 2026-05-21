@@ -516,27 +516,70 @@ async function deleteTx(id) {
 //  COMPUTE
 // ══════════════════════════════════════════════════════════
 function compute() {
+  // cashAcc  = ยอดสะสม (รับ − ซื้อทั้งหมด)  ติดลบ = ยังไม่คืนทุน
+  // shopDebt = หนี้เงินร้านที่ยังค้าง (subset ของ cashAcc ที่เป็นลบ)
+  // profitReady = กำไรสะสมที่พร้อมแบ่ง = cashAcc เมื่อเป็นบวก
+  //   ↳ เพิ่มเฉพาะส่วนที่ cashAcc ข้ามจากลบมาบวก หรือบวกขึ้นจากเดิม
+  //   ↳ ลดเมื่อใช้เงินร้านซื้อของ (shopDebt เพิ่ม)
+
   let cashAcc = 0, shopDebt = 0, profitReady = 0;
   let totalBuy = 0, totalRecv = 0, withdrawSal = 0, withdrawDiv = 0;
   const rows = [];
+
   for (const tx of txs) {
     const out = Number(tx.out) || 0, inp = Number(tx.inp) || 0;
     let repaidThis = 0, newProfitThis = 0;
+
     if (tx.type === 'ซื้อของ') {
-      totalBuy += out; cashAcc -= out;
-      if (tx.src === 'เงินร้าน') shopDebt += out;
+      totalBuy += out;
+      const cashBefore = cashAcc;
+      cashAcc -= out;
+      if (tx.src === 'เงินร้าน') {
+        // ใช้เงินร้านซื้อ → หักจากกำไรที่สะสมไว้
+        shopDebt += out;
+        profitReady = Math.max(0, profitReady - out);
+      }
+      // ถ้าใช้เงินตัวเอง cashAcc ลด แต่ profitReady ไม่เปลี่ยน
+      // (ทุนส่วนตัวจะหักตอน cashAcc ยังติดลบ ไม่ให้นับกำไร)
+
     } else if (tx.type === 'รับเงินจากร้าน') {
-      totalRecv += inp; cashAcc += inp;
+      totalRecv += inp;
+      const cashBefore = cashAcc;
+      cashAcc += inp;
+
+      // 1) หักคืนหนี้เงินร้านก่อน (ถ้ามี)
       repaidThis = Math.min(shopDebt, inp);
-      shopDebt = Math.max(0, shopDebt - inp);
-      newProfitThis = Math.max(0, inp - repaidThis);
+      shopDebt   = Math.max(0, shopDebt - inp);
+
+      // 2) กำไรใหม่ = ส่วนที่ทำให้ cashAcc ข้ามจากลบมาบวก
+      //    ถ้า cashBefore < 0 และ cashAcc > 0 → กำไรใหม่ = cashAcc (ส่วนที่เกิน 0)
+      //    ถ้า cashBefore >= 0 → กำไรใหม่ = inp ทั้งหมด (แต่ต้องหัก repaidThis ก่อน)
+      if (cashBefore >= 0) {
+        // ไม่ติดทุน → ที่รับมาลบหนี้ร้านออก แล้วที่เหลือคือกำไรใหม่
+        newProfitThis = Math.max(0, inp - repaidThis);
+      } else if (cashAcc > 0) {
+        // เพิ่งข้ามศูนย์ → กำไรใหม่คือส่วนที่เกิน 0 เท่านั้น
+        newProfitThis = cashAcc;
+      } else {
+        // ยังติดลบอยู่ → ยังไม่มีกำไร
+        newProfitThis = 0;
+      }
       profitReady += newProfitThis;
-    } else if (tx.type === 'เบิกเงินเดือน') withdrawSal += out;
-    else if (tx.type === 'เบิกเงินปันผล') withdrawDiv += out;
+
+    } else if (tx.type === 'เบิกเงินเดือน') {
+      withdrawSal += out;
+    } else if (tx.type === 'เบิกเงินปันผล') {
+      withdrawDiv += out;
+    }
+
     rows.push({ ...tx, cashAcc, shopDebt, profitReady, repaidThis, newProfitThis });
   }
-  const shopAlloc = profitReady * 0.4, salAlloc = profitReady * 0.4, divAlloc = profitReady * 0.2;
-  return { rows, totalBuy, totalRecv, cashAcc, shopDebt, profitReady, shopAlloc, salAlloc, divAlloc, withdrawSal, withdrawDiv };
+
+  const shopAlloc = profitReady * 0.4;
+  const salAlloc  = profitReady * 0.4;
+  const divAlloc  = profitReady * 0.2;
+  return { rows, totalBuy, totalRecv, cashAcc, shopDebt, profitReady,
+           shopAlloc, salAlloc, divAlloc, withdrawSal, withdrawDiv };
 }
 
 // ══════════════════════════════════════════════════════════
