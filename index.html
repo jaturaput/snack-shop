@@ -535,12 +535,12 @@ function compute() {
       const cashBefore = cashAcc;
       cashAcc -= out;
       if (tx.src === 'เงินร้าน') {
-        // ใช้เงินร้านซื้อ → หักจากกำไรที่สะสมไว้
+        // บันทึกหนี้ร้านไว้ — แต่ไม่หัก profitReady
+        // เงินเดือน/ปันผลที่แบ่งไว้ไม่หายไปไหน
+        // หนี้จะถูกหักเมื่อรับเงินจากร้านกลับมา (ผ่าน repaidThis)
         shopDebt += out;
-        profitReady = Math.max(0, profitReady - out);
       }
-      // ถ้าใช้เงินตัวเอง cashAcc ลด แต่ profitReady ไม่เปลี่ยน
-      // (ทุนส่วนตัวจะหักตอน cashAcc ยังติดลบ ไม่ให้นับกำไร)
+      // cashAcc ลดทุกกรณี — profitReady ไม่เปลี่ยน
 
     } else if (tx.type === 'รับเงินจากร้าน') {
       totalRecv += inp;
@@ -555,10 +555,11 @@ function compute() {
       //    ถ้า cashBefore < 0 และ cashAcc > 0 → กำไรใหม่ = cashAcc (ส่วนที่เกิน 0)
       //    ถ้า cashBefore >= 0 → กำไรใหม่ = inp ทั้งหมด (แต่ต้องหัก repaidThis ก่อน)
       if (cashBefore >= 0) {
-        // ไม่ติดทุน → ที่รับมาลบหนี้ร้านออก แล้วที่เหลือคือกำไรใหม่
+        // ไม่ติดทุนก่อนรับเงิน → กำไรใหม่ = รับมา − หนี้ร้านที่คืนไป
         newProfitThis = Math.max(0, inp - repaidThis);
       } else if (cashAcc > 0) {
-        // เพิ่งข้ามศูนย์ → กำไรใหม่คือส่วนที่เกิน 0 เท่านั้น
+        // เพิ่งข้ามศูนย์ → กำไรใหม่ = เฉพาะส่วนที่เกิน 0
+        // ไม่ต้องหัก repaidThis เพิ่มเพราะหนี้ร้านอยู่ใน cashAcc แล้ว
         newProfitThis = cashAcc;
       } else {
         // ยังติดลบอยู่ → ยังไม่มีกำไร
