@@ -275,7 +275,31 @@ input:disabled { opacity: .45; cursor: not-allowed; background: var(--surface2);
         <div class="form-row">
           <div>
             <label>วันที่</label>
-            <input type="date" id="f-date">
+            <div style="position:relative">
+              <input type="text" id="f-date-display" placeholder="เลือกวันที่" readonly
+                style="cursor:pointer;background:var(--surface)"
+                onclick="toggleDatePicker()">
+              <input type="hidden" id="f-date">
+              <div id="date-picker" style="display:none;position:absolute;top:42px;left:0;z-index:200;
+                background:var(--surface);border:1px solid var(--border2);border-radius:var(--r-lg);
+                padding:14px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:280px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                  <button onclick="changeMonth(-1)" style="border:none;background:none;cursor:pointer;font-size:18px;color:var(--text);padding:4px 8px">‹</button>
+                  <span id="picker-label" style="font-weight:600;font-size:14px"></span>
+                  <button onclick="changeMonth(1)"  style="border:none;background:none;cursor:pointer;font-size:18px;color:var(--text);padding:4px 8px">›</button>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;margin-bottom:6px">
+                  <span style="font-size:10px;color:var(--muted);padding:2px">อา</span>
+                  <span style="font-size:10px;color:var(--muted);padding:2px">จ</span>
+                  <span style="font-size:10px;color:var(--muted);padding:2px">อ</span>
+                  <span style="font-size:10px;color:var(--muted);padding:2px">พ</span>
+                  <span style="font-size:10px;color:var(--muted);padding:2px">พฤ</span>
+                  <span style="font-size:10px;color:var(--muted);padding:2px">ศ</span>
+                  <span style="font-size:10px;color:var(--muted);padding:2px">ส</span>
+                </div>
+                <div id="picker-days" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center"></div>
+              </div>
+            </div>
           </div>
           <div>
             <label>ประเภท</label>
@@ -590,6 +614,20 @@ function fmt(n, d = 2) {
   return Number(n).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
+// แปลง YYYY-MM-DD → วันที่ภาษาไทย เช่น "19 พ.ค. 2569"
+const THAI_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.',
+                            'ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+function fmtDate(dateStr) {
+  if (!dateStr) return '—';
+  // รองรับทั้ง YYYY-MM-DD และ timestamp
+  const m = String(dateStr).match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return dateStr;
+  const y = parseInt(m[1]) + 543; // แปลงเป็น พ.ศ.
+  const mo = THAI_MONTHS_SHORT[parseInt(m[2]) - 1];
+  const d  = parseInt(m[3]);
+  return d + ' ' + mo + ' ' + y;
+}
+
 function badge(type) {
   const m = {
     'ซื้อของ': 'buy', 'รับเงินจากร้าน': 'recv',
@@ -630,7 +668,7 @@ function renderDash(d) {
   const recent = [...d.rows].reverse().slice(0, 6);
   document.getElementById('dash-tbody').innerHTML = recent.length
     ? recent.map(r => `<tr>
-        <td class="mono" style="font-size:12px;color:var(--muted)">${r.date}</td>
+        <td class="mono" style="font-size:12px;color:var(--muted)">${fmtDate(r.date)}</td>
         <td>${badge(r.type)}</td>
         <td style="max-width:200px">${r.detail}${r.type === 'รับเงินจากร้าน' && r.repaidThis > 0
           ? `<br><span style="font-size:11px;color:var(--accent)">↩ คืนร้าน ${fmt(r.repaidThis)} · กำไรใหม่ ${fmt(r.newProfitThis)}</span>` : ''}</td>
@@ -645,7 +683,7 @@ function renderDash(d) {
 function renderTx(d) {
   document.getElementById('tx-tbody').innerHTML = d.rows.length
     ? [...d.rows].reverse().map(r => `<tr>
-        <td class="mono" style="font-size:12px;color:var(--muted);white-space:nowrap">${r.date}</td>
+        <td class="mono" style="font-size:12px;color:var(--muted);white-space:nowrap">${fmtDate(r.date)}</td>
         <td>${badge(r.type)}${r.src ? `<br><span style="font-size:10px;color:var(--faint)">${r.src}</span>` : ''}</td>
         <td style="max-width:220px">${r.detail}${r.type === 'รับเงินจากร้าน' && r.repaidThis > 0
           ? `<br><span style="font-size:11px;color:var(--accent)">↩ คืนร้าน ${fmt(r.repaidThis)} · กำไรใหม่ ${fmt(r.newProfitThis)}</span>` : ''}</td>
@@ -801,7 +839,86 @@ function clearApiUrl() {
 // ══════════════════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════════════════
-document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
+// ══════════════════════════════════════════════════════════
+//  THAI DATE PICKER
+// ══════════════════════════════════════════════════════════
+const THAI_MONTHS_FULL = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+                           'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+let pickerYear, pickerMonth;
+
+function initPicker() {
+  const now = new Date();
+  pickerYear  = now.getFullYear();
+  pickerMonth = now.getMonth();
+  renderPicker();
+}
+
+function toggleDatePicker() {
+  const dp = document.getElementById('date-picker');
+  if (dp.style.display === 'none') {
+    dp.style.display = 'block';
+    renderPicker();
+    // ปิดเมื่อคลิกนอก
+    setTimeout(() => document.addEventListener('click', closeDatePickerOutside), 10);
+  } else {
+    dp.style.display = 'none';
+  }
+}
+
+function closeDatePickerOutside(e) {
+  const dp = document.getElementById('date-picker');
+  const inp = document.getElementById('f-date-display');
+  if (!dp.contains(e.target) && e.target !== inp) {
+    dp.style.display = 'none';
+    document.removeEventListener('click', closeDatePickerOutside);
+  }
+}
+
+function changeMonth(delta) {
+  pickerMonth += delta;
+  if (pickerMonth > 11) { pickerMonth = 0; pickerYear++; }
+  if (pickerMonth < 0)  { pickerMonth = 11; pickerYear--; }
+  renderPicker();
+}
+
+function renderPicker() {
+  const label = document.getElementById('picker-label');
+  label.textContent = THAI_MONTHS_FULL[pickerMonth] + ' ' + (pickerYear + 543);
+
+  const firstDay = new Date(pickerYear, pickerMonth, 1).getDay();
+  const daysInMonth = new Date(pickerYear, pickerMonth + 1, 0).getDate();
+  const selected = document.getElementById('f-date').value;
+
+  let html2 = '';
+  for (let i = 0; i < firstDay; i++) html2 += '<span></span>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const mm   = String(pickerMonth + 1).padStart(2, '0');
+    const dd   = String(d).padStart(2, '0');
+    const val  = pickerYear + '-' + mm + '-' + dd;
+    const isSelected = val === selected;
+    const isToday    = val === new Date().toISOString().split('T')[0];
+    const bg = isSelected ? 'background:var(--accent);color:#fff;font-weight:600;'
+             : isToday  ? 'background:var(--accent-light);color:var(--accent-text);font-weight:500;'
+             : 'background:none;color:var(--text);';
+    html2 += `<button onclick="selectDate('${val}')" style="border:none;border-radius:6px;padding:5px 2px;font-size:13px;cursor:pointer;font-family:var(--sans);width:100%;${bg}">${d}</button>`;
+  }
+  document.getElementById('picker-days').innerHTML = html2;
+}
+
+function selectDate(val) {
+  document.getElementById('f-date').value = val;
+  document.getElementById('f-date-display').value = fmtDate(val);
+  document.getElementById('date-picker').style.display = 'none';
+  document.removeEventListener('click', closeDatePickerOutside);
+}
+
+// set today as default
+(function() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('f-date').value = today;
+  document.getElementById('f-date-display').value = fmtDate(today);
+  initPicker();
+})();
 
 if (apiUrl) {
   loadTxs();
