@@ -615,16 +615,17 @@ function fmt(n, d = 2) {
 }
 
 // แปลง YYYY-MM-DD → วันที่ภาษาไทย เช่น "19 พ.ค. 2569"
+// parse ตัวเลขตรงๆ จาก string ไม่ผ่าน Date object เพื่อหลีกเลี่ยง timezone -1 วัน
 const THAI_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.',
                             'ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 function fmtDate(dateStr) {
   if (!dateStr) return '—';
-  // รองรับทั้ง YYYY-MM-DD และ timestamp
   const m = String(dateStr).match(/(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return dateStr;
-  const y = parseInt(m[1]) + 543; // แปลงเป็น พ.ศ.
-  const mo = THAI_MONTHS_SHORT[parseInt(m[2]) - 1];
-  const d  = parseInt(m[3]);
+  // ใช้ตัวเลขจาก regex ตรงๆ — ไม่ new Date() เพราะจะถูกแปลงเป็น UTC แล้วเพี้ยน
+  const y  = parseInt(m[1], 10) + 543;
+  const mo = THAI_MONTHS_SHORT[parseInt(m[2], 10) - 1];
+  const d  = parseInt(m[3], 10);
   return d + ' ' + mo + ' ' + y;
 }
 
@@ -896,7 +897,9 @@ function renderPicker() {
     const dd   = String(d).padStart(2, '0');
     const val  = pickerYear + '-' + mm + '-' + dd;
     const isSelected = val === selected;
-    const isToday    = val === new Date().toISOString().split('T')[0];
+    // ใช้ local date ไม่ใช่ UTC เพื่อป้องกัน timezone -1 วัน
+    const _n = new Date(); const _nd = _n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0')+'-'+String(_n.getDate()).padStart(2,'0');
+    const isToday    = val === _nd;
     const bg = isSelected ? 'background:var(--accent);color:#fff;font-weight:600;'
              : isToday  ? 'background:var(--accent-light);color:var(--accent-text);font-weight:500;'
              : 'background:none;color:var(--text);';
@@ -914,7 +917,9 @@ function selectDate(val) {
 
 // set today as default
 (function() {
-  const today = new Date().toISOString().split('T')[0];
+  // local date (ไม่ใช่ UTC) ป้องกัน timezone ทำให้วันเพี้ยน
+  const _t = new Date();
+  const today = _t.getFullYear() + '-' + String(_t.getMonth()+1).padStart(2,'0') + '-' + String(_t.getDate()).padStart(2,'0');
   document.getElementById('f-date').value = today;
   document.getElementById('f-date-display').value = fmtDate(today);
   initPicker();

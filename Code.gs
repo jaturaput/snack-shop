@@ -102,6 +102,37 @@ function fail(msg) {
 
 // ── CRUD ────────────────────────────────────────────────────
 
+/*function formatDate(val) {
+  // Google Sheets เก็บวันที่เป็น Date object (UTC midnight)
+  // ต้องใช้ getUTC* ไม่ใช่ getFullYear/getMonth/getDate
+  // เพราะ Apps Script server อาจอยู่คนละ timezone ทำให้ -1 วัน
+  if (!val) return "";
+  if (val instanceof Date) {
+    const y = val.getUTCFullYear();
+    const m = String(val.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(val.getUTCDate()).padStart(2, "0");
+    return y + "-" + m + "-" + d;
+  }
+  // ถ้าเป็น string ตัดเอาแค่ YYYY-MM-DD
+  const s = String(val);
+  const match = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return match[1] + "-" + match[2] + "-" + match[3];
+  return s;
+}*/
+function formatDate(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    // ให้ Utilities จัดการ format ให้ตรงกับ Timezone ของตัว Script เลยชัวร์สุด
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  }
+  
+  // ถ้าเป็น string ตัดเอาแค่ YYYY-MM-DD
+  const s = String(val);
+  const match = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return match[1] + "-" + match[2] + "-" + match[3];
+  return s;
+}
+
 function getAllTx() {
   const rows = getSheet().getDataRange().getValues();
   if (rows.length <= 1) return [];
@@ -109,7 +140,7 @@ function getAllTx() {
     .filter(r => r[0] !== "")
     .map(r => ({
       id:        String(r[0]),
-      date:      r[1],
+      date:      formatDate(r[1]),
       type:      r[2],
       src:       r[3],
       detail:    r[4],
